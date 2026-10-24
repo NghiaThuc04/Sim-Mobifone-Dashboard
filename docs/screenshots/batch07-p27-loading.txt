@@ -1,0 +1,1 @@
+Observed production UI: Đang tải không gian làm việc… on /admin/check-sim (test fixture only).

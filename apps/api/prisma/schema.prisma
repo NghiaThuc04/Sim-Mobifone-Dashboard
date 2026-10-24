@@ -1,0 +1,361 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  active
+  locked
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique @db.VarChar(254)
+  fullName     String     @map("full_name") @db.VarChar(150)
+  passwordHash String     @map("password_hash") @db.Text
+  role         UserRole
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions     AuthSession[]
+  permissions  EmployeePermission[]
+
+  @@map("users")
+}
+
+model EmployeePermission {
+  userId String @map("user_id") @db.Uuid
+  permission String @db.VarChar(64)
+  enabled Boolean
+  updatedBy String @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permission])
+  @@map("employee_permissions")
+}
+
+model AuthSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model LoginLimit {
+  key       String   @id @db.Char(64)
+  attempts  Int
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("auth_login_limits")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorKind  String   @map("actor_kind") @db.VarChar(16)
+  action     String   @db.VarChar(64)
+  targetType String   @map("target_type") @db.VarChar(32)
+  targetId   String?  @map("target_id") @db.Uuid
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model CommissionPolicy {
+  id String @id @default(uuid()) @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  ratePercent Decimal @map("rate_percent") @db.Decimal(65, 30)
+  previousRatePercent Decimal? @map("previous_rate_percent") @db.Decimal(65, 30)
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(3)
+  createdBy String @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([employeeId, effectiveAt])
+  @@map("commission_policies")
+}
+
+model EmployeeSalary {
+  id String @id @default(uuid()) @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  amount Decimal @db.Decimal(65,30)
+  previousAmount Decimal? @map("previous_amount") @db.Decimal(65,30)
+  effectiveFrom DateTime @map("effective_from") @db.Timestamptz(3)
+  createdBy String @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@unique([employeeId, effectiveFrom])
+  @@map("employee_salaries")
+}
+
+model EmployeeLeaveRecord {
+ id String @id @default(uuid()) @db.Uuid
+ employeeId String @map("employee_id") @db.Uuid
+ fromDate DateTime @map("from_date") @db.Date
+ toDate DateTime @map("to_date") @db.Date
+ days Decimal @db.Decimal(65,30)
+ reason String @db.VarChar(500)
+ notes String @default("") @db.VarChar(2000)
+ createdBy String @map("created_by") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ allocations EmployeeLeaveAllocation[]
+ @@index([employeeId, fromDate, toDate])
+ @@map("employee_leave_records")
+}
+
+model EmployeeLeaveAllocation {
+ leaveRecordId String @map("leave_record_id") @db.Uuid
+ month DateTime @db.Date
+ days Decimal @db.Decimal(65,30)
+ record EmployeeLeaveRecord @relation(fields: [leaveRecordId], references: [id], onDelete: Restrict)
+ @@id([leaveRecordId, month])
+ @@index([month])
+ @@map("employee_leave_allocations")
+}
+
+model Carrier {
+ id String @id @default(uuid()) @db.Uuid
+ code String @unique @db.VarChar(80)
+ name String @db.VarChar(150)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+ sims Sim[]
+ @@map("carriers")
+}
+model SimCategory {
+ id String @id @default(uuid()) @db.Uuid
+ code String @unique @db.VarChar(80)
+ name String @db.VarChar(150)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+ sims Sim[]
+ @@map("sim_categories")
+}
+
+enum SimStockStatus {
+ AVAILABLE
+ RESERVED
+ SOLD
+}
+
+model Sim {
+ id String @id @default(uuid()) @db.Uuid
+ phoneNumber String @map("phone_number") @db.VarChar(32)
+ carrierId String @map("carrier_id") @db.Uuid
+ categoryId String @map("category_id") @db.Uuid
+ costPrice Decimal @map("cost_price") @db.Decimal(65,30)
+ sellingPrice Decimal @map("selling_price") @db.Decimal(65,30)
+ stockStatus SimStockStatus @default(AVAILABLE) @map("stock_status")
+ isVisible Boolean @default(false) @map("is_visible")
+ visibilityRequested Boolean @default(false) @map("visibility_requested")
+ hasPriceError Boolean @default(false) @map("has_price_error")
+ deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+ errorConfirmedAt DateTime? @map("error_confirmed_at") @db.Timestamptz(3)
+ version Int @default(1)
+ createdBy String? @map("created_by") @db.Uuid
+ updatedBy String? @map("updated_by") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+ carrier Carrier @relation(fields:[carrierId],references:[id],onDelete:Restrict)
+ category SimCategory @relation(fields:[categoryId],references:[id],onDelete:Restrict)
+ priceAlerts SimPriceAlert[]
+ changes SimChange[]
+ removalLog SimRemovalLog?
+ orderItems OrderItem[]
+ reservations InventoryReservation[]
+ @@map("sims")
+}
+
+model SimPriceAlert {
+ id String @id @default(uuid()) @db.Uuid
+ simId String @map("sim_id") @db.Uuid
+ reason String @db.VarChar(80)
+ costSnapshot Decimal @map("cost_snapshot") @db.Decimal(65,30)
+ priceSnapshot Decimal @map("price_snapshot") @db.Decimal(65,30)
+ detectedAt DateTime @default(now()) @map("detected_at") @db.Timestamptz(3)
+ resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(3)
+ sim Sim @relation(fields:[simId],references:[id],onDelete:Restrict)
+ @@map("sim_price_alerts")
+}
+
+model SimChange {
+ id String @id @default(uuid()) @db.Uuid
+ simId String @map("sim_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ before Json
+ after Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ sim Sim @relation(fields:[simId],references:[id],onDelete:Restrict)
+ @@index([simId,createdAt])
+ @@map("sim_changes")
+}
+
+model SimImportBatch {
+ id String @id @default(uuid()) @db.Uuid
+ createdBy String @map("created_by") @db.Uuid
+ payload Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(3)
+ selectionHash String? @map("selection_hash") @db.Char(64)
+ result Json?
+ @@index([createdBy,expiresAt])
+ @@map("sim_import_batches")
+}
+
+model SimRemovalLog {
+ id String @id @default(uuid()) @db.Uuid
+ simId String @unique @map("sim_id") @db.Uuid
+ phoneNumberSnapshot String @map("phone_number_snapshot") @db.VarChar(32)
+ actorId String @map("actor_id") @db.Uuid
+ reason String? @db.VarChar(500)
+ before Json
+ removedAt DateTime @map("removed_at") @db.Timestamptz(3)
+ sim Sim @relation(fields:[simId],references:[id],onDelete:Restrict)
+ @@index([removedAt])
+ @@map("sim_removal_logs")
+}
+
+enum OrderStatus {
+ PENDING
+ CONFIRMED
+ PROCESSING
+ COMPLETED
+ CANCELLED
+}
+
+model Customer {
+ id String @id @default(uuid()) @db.Uuid
+ fullName String @map("full_name") @db.VarChar(150)
+ phone String @db.VarChar(33)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ orders Order[]
+ @@map("customers")
+}
+
+model Order {
+ id String @id @default(uuid()) @db.Uuid
+ orderCode String @unique @map("order_code") @db.VarChar(64)
+ customerId String @map("customer_id") @db.Uuid
+ status OrderStatus @default(PENDING)
+ assignedStaffId String? @map("assigned_staff_id") @db.Uuid
+ claimedAt DateTime? @map("claimed_at") @db.Timestamptz(3)
+ beneficiaryNeedsDecision Boolean @default(false) @map("beneficiary_needs_decision")
+ completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+ completedBy String? @map("completed_by") @db.Uuid
+ createdBy String @map("created_by") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ customer Customer @relation(fields:[customerId],references:[id],onDelete:Restrict)
+ items OrderItem[]
+ reservations InventoryReservation[]
+ creationKey OrderCreateKey?
+ assignmentHistory OrderAssignmentHistory[]
+ statusHistory OrderStatusHistory[]
+ completion OrderCompletion?
+ @@index([createdAt,id])
+ @@index([status,createdAt,id])
+ @@index([assignedStaffId,createdAt,id])
+ @@map("orders")
+}
+
+model OrderItem {
+ id String @id @default(uuid()) @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ simId String @map("sim_id") @db.Uuid
+ phoneNumberSnapshot String @map("phone_number_snapshot") @db.VarChar(32)
+ sellingPriceSnapshot Decimal @map("selling_price_snapshot") @db.Decimal(65,30)
+ costPriceSnapshot Decimal @map("cost_price_snapshot") @db.Decimal(65,30)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ sim Sim @relation(fields:[simId],references:[id],onDelete:Restrict)
+ @@unique([orderId,simId])
+ @@index([phoneNumberSnapshot,orderId])
+ @@index([simId])
+ @@map("order_items")
+}
+
+model InventoryReservation {
+ id String @id @default(uuid()) @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ simId String @map("sim_id") @db.Uuid
+ phoneNumberSnapshot String @map("phone_number_snapshot") @db.VarChar(32)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ releasedAt DateTime? @map("released_at") @db.Timestamptz(3)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ sim Sim @relation(fields:[simId],references:[id],onDelete:Restrict)
+ @@index([orderId])
+ @@map("inventory_reservations")
+}
+
+model OrderCreateKey {
+ actorId String @map("actor_id") @db.Uuid
+ idempotencyKey String @map("idempotency_key") @db.Uuid
+ requestHash String @map("request_hash") @db.Char(64)
+ orderId String @unique @map("order_id") @db.Uuid
+ response Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ @@id([actorId,idempotencyKey])
+ @@map("order_create_keys")
+}
+
+model OrderAssignmentHistory {
+ id String @id @default(uuid()) @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ previousStaffId String? @map("previous_staff_id") @db.Uuid
+ assignedStaffId String? @map("assigned_staff_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String @db.VarChar(16)
+ reason String? @db.VarChar(500)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ @@index([orderId,createdAt,id])
+ @@map("order_assignment_history")
+}
+
+model OrderStatusHistory {
+ id String @id @default(uuid()) @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ previousStatus OrderStatus @map("previous_status")
+ status OrderStatus
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ @@index([orderId,createdAt,id])
+ @@map("order_status_history")
+}
+
+model OrderCompletion {
+ orderId String @id @map("order_id") @db.Uuid
+ completedAt DateTime @map("completed_at") @db.Timestamptz(3)
+ completedBy String @map("completed_by") @db.Uuid
+ approvalStatus String @default("PENDING_APPROVAL") @map("approval_status") @db.VarChar(32)
+ rateEmployeeId String? @map("rate_employee_id") @db.Uuid
+ ratePolicyId String? @map("rate_policy_id") @db.Uuid
+ rateSnapshot Decimal? @map("rate_snapshot") @db.Decimal(65,30)
+ policyEffectiveAt DateTime? @map("policy_effective_at") @db.Timestamptz(3)
+ beneficiaryId String? @map("beneficiary_id") @db.Uuid
+ beneficiaryState String @map("beneficiary_state") @db.VarChar(16)
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ @@map("order_completions")
+}

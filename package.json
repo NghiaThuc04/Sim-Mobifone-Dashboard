@@ -1,0 +1,45 @@
+{
+  "name": "sim-management-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/admin",
+    "apps/api",
+    "packages/shared"
+  ],
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11.0.0 <12"
+  },
+  "packageManager": "npm@11.19.0",
+  "overrides": {
+    "@nestjs/platform-express": { "multer": "2.5.0" },
+    "exceljs": { "uuid": "11.1.1" }
+  },
+  "scripts": {
+    "build:shared": "npm run build -w @sim-dashboard/shared",
+    "build:api": "npm run db:generate && npm run build:shared && npm run build -w @sim-dashboard/api",
+    "build": "npm run build:api && npm run build -w @sim-dashboard/admin",
+    "dev": "npm run build:api && concurrently --kill-others --names shared,admin,api,types \"npm run dev -w @sim-dashboard/shared\" \"npm run dev -w @sim-dashboard/admin\" \"npm run dev -w @sim-dashboard/api\" \"npm run dev:types -w @sim-dashboard/api\"",
+    "start": "concurrently --kill-others --names admin,api \"npm run start -w @sim-dashboard/admin\" \"npm run start -w @sim-dashboard/api\"",
+    "typecheck": "npm run db:generate && npm run build:shared && npm run typecheck --workspaces",
+    "lint": "eslint apps packages --max-warnings=0",
+    "test": "npm run build:api && node scripts/test.mjs",
+    "verify": "npm run build && npm run typecheck && npm run lint && npm test",
+    "db:generate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js generate --config apps/api/prisma.config.ts",
+    "db:migrate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate deploy --config apps/api/prisma.config.ts",
+    "db:status": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate status --config apps/api/prisma.config.ts",
+    "db:local": "node scripts/local-db.mjs",
+    "db:stop": "node scripts/local-db.mjs stop",
+    "admin:init": "npm run build:api && node --env-file-if-exists=.env apps/api/dist/src/cli/init-admin.js",
+    "admin:rotate-password": "npm run build:api && node --env-file-if-exists=.env apps/api/dist/src/cli/init-admin.js --rotate-password"
+  },
+  "devDependencies": {
+    "@next/eslint-plugin-next": "16.4.3",
+    "@types/node": "24.19.2",
+    "concurrently": "10.0.6",
+    "eslint": "10.13.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0"
+  }
+}

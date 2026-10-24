@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE orders ADD COLUMN beneficiary_needs_decision BOOLEAN NOT NULL DEFAULT FALSE;
+COMMIT;

@@ -1,0 +1,16 @@
+export const HEALTH_ENDPOINT = '/api/v1/health';
+export const HEALTH_STATUS = 'ok';
+export type HealthResponse = { status: typeof HEALTH_STATUS };
+export * from './permissions';
+export * from './navigation';
+export * from './employees';
+export * from './commissions';
+export * from './salaries';
+export * from './decimal';
+export * from './leaves';
+export * from './catalogs';
+export * from './inventory';
+export * from './sim-import';
+export * from './sim-inspection';
+export * from './staff-sim-upload';
+export * from './orders';

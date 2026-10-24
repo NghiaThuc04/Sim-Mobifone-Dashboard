@@ -1,0 +1,22 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { PERMISSIONS, type OrderDetail } from '@sim-dashboard/shared';
+import { HttpFixture } from './helpers/http-fixture';
+import { orderData } from './helpers/order-data';
+const f = new HttpFixture();
+test('P36 detail snapshots, cost projection, direct id, unknown id and access', async () => {
+ const {order,sim}=await orderData(f.db,f.adminId);
+ await f.db.orderItem.create({data:{orderId:order.id,simId:sim.id,phoneNumberSnapshot:sim.phoneNumber,sellingPriceSnapshot:sim.sellingPrice,costPriceSnapshot:sim.costPrice}});
+ await f.db.sim.update({where:{id:sim.id},data:{phoneNumber:sim.phoneNumber+'9',sellingPrice:'999999',deletedAt:new Date()}});
+ const path='/admin/orders/'+order.id;
+ const admin=await (await f.get(path)).json() as OrderDetail;
+ assert.equal(admin.items[0].costPrice,sim.costPrice.toString());assert.equal(admin.items[0].sellingPrice,sim.sellingPrice.toString());assert.equal(admin.items[0].phoneNumber,sim.phoneNumber);
+ const response=await f.get(path,f.staffCookie);assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+ const staff=await response.json() as OrderDetail;assert.equal(staff.customer.phone,'+8400001');assert.equal(staff.items[0].costPrice,undefined);assert(!JSON.stringify(staff).includes('costPrice'));
+ assert.equal((await f.get('/admin/orders/'+randomUUID())).status,404);assert.equal((await f.get('/admin/orders/bad')).status,400);
+ for(const query of ['itemPage=0','itemPage=1&itemPage=2','includeCost=true'])assert.equal((await f.get(path+'?'+query)).status,400);
+ const empty=await (await f.get(path+'?itemPage=2')).json() as OrderDetail;assert.equal(empty.items.length,0);assert.equal(empty.itemTotal,1);
+ assert.equal((await f.get(path,'')).status,401);
+ await f.db.employeePermission.create({data:{userId:f.staffId,permission:PERMISSIONS.ORDERS_VIEW,enabled:false,updatedBy:f.adminId}});assert.equal((await f.get(path,f.staffCookie)).status,403);
+});
